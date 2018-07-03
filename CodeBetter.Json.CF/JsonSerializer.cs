@@ -2,27 +2,28 @@
 {
     using System;
     using System.Collections;
-    using System.Collections.Generic;
-    using System.IO;
     using System.Reflection;
-    using System.Text;
     using Helpers;
 
+    public delegate bool PreFieldSerializingDelegate(string name, ref object value);
+    
     public class JsonSerializer
     {
         //private readonly StringBuilder _builder;
         private readonly JsonWriter _writer;
+        private readonly string _fieldPrefix;
         private ArrayList _currentGraph;
-        private string _fieldPrefix;
+        private readonly PreFieldSerializingDelegate _callback;
 
-        public JsonSerializer(JsonWriter writer) : this(writer, string.Empty)
+        public JsonSerializer(JsonWriter writer, PreFieldSerializingDelegate callback) : this(writer, string.Empty, callback)
         {
         }
-        public JsonSerializer(JsonWriter writer, string fieldPrefix)
+        public JsonSerializer(JsonWriter writer, string fieldPrefix, PreFieldSerializingDelegate callback)
         {
             _writer = writer;
             _currentGraph = new ArrayList(0);
-            _fieldPrefix = fieldPrefix;   
+            _fieldPrefix = fieldPrefix;
+            _callback = callback;
         }
         
         public static void Serialize(JsonWriter writer, object instance)
@@ -31,11 +32,26 @@
         }
         public static void Serialize(JsonWriter writer, object instance, string fieldPrefix)
         {
-            new JsonSerializer(writer, fieldPrefix).SerializeValue(instance);
+            Serialize(writer, instance, fieldPrefix, null);            
+        }
+        public static void Serialize(JsonWriter writer, object instance, PreFieldSerializingDelegate callback)
+        {
+            Serialize(writer, instance, string.Empty, callback);
+        }
+        public static void Serialize(JsonWriter writer, object instance, string fieldPrefix, PreFieldSerializingDelegate callback)
+        {
+            new JsonSerializer(writer, fieldPrefix, callback).SerializeValue("root", instance);
         }
         
-        private void SerializeValue(object value)
+        private void SerializeValue(string name, object value)
         {
+            if (_callback != null)
+            {
+                if (!_callback(name, ref value))
+                {
+                    return;
+                }
+            }
             if (value == null)
             {
                 _writer.WriteNull();
@@ -46,9 +62,14 @@
                 _writer.WriteString((string) value);
                 return;
             }
-            if (value is int || value is long || value is short || value is float || value is byte || value is sbyte || value is uint || value is ulong || value is ushort || value is double)
+            if (value is int || value is long || value is short || value is float || value is byte || value is sbyte || value is uint || value is ulong || value is ushort || value is double || value is decimal)
             {
                 _writer.WriteRaw(value.ToString());               
+                return;
+            }
+            if (value is Enum)
+            {
+                _writer.WriteRaw(((Enum)value).ToString("d"));
                 return;
             }
             if (value is char)
@@ -85,7 +106,7 @@
             {
                 return;
             }
-            List<FieldInfo> fields = ReflectionHelper.GetSerializableFields(@object.GetType());
+            var fields = ReflectionHelper.GetSerializableFields(@object.GetType());
             if (fields.Count == 0)
             {
                 return;
@@ -95,14 +116,14 @@
                 throw new JsonException("Recursive reference found. Serialization cannot complete. Consider marking the offending field with the NonSerializedAttribute");
             }
 
-            ArrayList oldGraph = _currentGraph;
+            var oldGraph = _currentGraph;
             var currentGraph = new ArrayList(_currentGraph);
             _currentGraph = currentGraph;
             _currentGraph.Add(@object);
 
             _writer.BeginObject();
             SerializeKeyValue(GetKeyName(fields[0]), ReflectionHelper.GetValue(fields[0], @object), true);
-            for (int i = 1; i < fields.Count; ++i)
+            for (var i = 1; i < fields.Count; ++i)
             {
                 SerializeKeyValue(GetKeyName(fields[i]), ReflectionHelper.GetValue(fields[i], @object), false);
             }
@@ -112,37 +133,38 @@
 
         private string GetKeyName(MemberInfo field)
         {
-            string name = field.Name;
+            var name = field.Name;
             return name.StartsWith(_fieldPrefix) ? name.Substring(_fieldPrefix.Length) : name;
         }
 
         private void SerializeEnumerable(IEnumerable value)
         {
-            IEnumerator e = value.GetEnumerator();
-            _writer.BeginArray();            
-            if (e.MoveNext())
+            var enumerator = value.GetEnumerator();
+            _writer.BeginArray();
+            var index = 0;        
+            if (enumerator.MoveNext())
             {
-                SerializeValue(e.Current);
+                SerializeValue((index++).ToString(), enumerator.Current);
             }
-            while (e.MoveNext())
+            while (enumerator.MoveNext())
             {
                 _writer.SeparateElements();
-                SerializeValue(e.Current);
+                SerializeValue((index++).ToString(), enumerator.Current);
             }            
             _writer.EndArray();
         }
 
         private void SerializeDictionary(IDictionary value)
         {
-            IDictionaryEnumerator e = value.GetEnumerator();
+            var enumerator = value.GetEnumerator();
             _writer.BeginObject();            
-            if (e.MoveNext())
+            if (enumerator.MoveNext())
             {
-                SerializeKeyValue(e.Key.ToString(), e.Value, true);
+                SerializeKeyValue(enumerator.Key.ToString(), enumerator.Value, true);
             }
-            while (e.MoveNext())
+            while (enumerator.MoveNext())
             {
-                SerializeKeyValue(e.Key.ToString(), e.Value, false);
+                SerializeKeyValue(enumerator.Key.ToString(), enumerator.Value, false);
             }            
             _writer.EndObject();
         }
@@ -155,7 +177,7 @@
                 _writer.NewLine();
             }
             _writer.WriteKey(key);
-            SerializeValue(value);
+            SerializeValue(key, value);
         }
     }
 }

@@ -4,6 +4,7 @@
     using System.Globalization;
     using System.IO;
     using System.Text;
+    using Helpers;
 
     public class JsonReader : IDisposable
     {
@@ -20,7 +21,7 @@
         {            
             while(true)
             {
-                char c = Peek();
+                var c = Peek();
                 if (!char.IsWhiteSpace(c))
                 {
                     break;
@@ -28,28 +29,34 @@
                 _reader.Read();
             }
         }
-        public virtual int ReadInt32()
+        public virtual int? ReadInt32(bool isNullable)
         {
-            string value = ReadNumericValue();
-            return value == null ? 0 : Convert.ToInt32(value);
+            var value = ReadNumericValue();
+            return value == null ? (isNullable ? null : (int?)0) : Convert.ToInt32(value);
         }
         public virtual string ReadString()
         {
-            AssertAndConsume(JsonTokens.StringDelimiter);            
-            StringBuilder sb = new StringBuilder(25);
-            bool isEscaped = false;
+            if (Peek() != JsonTokens.StringDelimiter)
+            {
+                AssertAndConsumeNull();
+                return null;   
+            }
+            Read(); //we know this is a StringDelimiter      
+            var sb = new StringBuilder(25);
+            var isEscaped = false;
 
             while(true)
             {
-                char c = Read();
+                var c = Read();
                 if (c == '\\' && !isEscaped)
                 {
                     isEscaped = true;
                     continue;
                 }
                 if (isEscaped)
-                {
-                    sb.Append(FromEscaped(c));
+                {                    
+                    if (c == 'u') { sb.Append(HandleEscapedSequence()); }
+                    else { sb.Append(FromEscaped(c)); }                    
                     isEscaped = false;
                     continue;
                 }
@@ -59,22 +66,22 @@
                 }
                 sb.Append(c);
             }            
-            string str = sb.ToString();
+            var str = sb.ToString();
             return str == "null" ? null : str;
         }
-        public virtual double ReadDouble()
+        public virtual double? ReadDouble(bool isNullable)
         {
-            string value = ReadNumericValue();            
-            return value == null ? 0 : Convert.ToDouble(value);
+            var value = ReadNumericValue();
+            return value == null ? (isNullable ? null : (double?)0) : Convert.ToDouble(value);
         }
-        public virtual DateTime ReadDateTime()
+        public virtual DateTime? ReadDateTime(bool isNullable)
         {
-            string str = ReadString();
-            return str == null ? DateTime.MinValue : DateTime.ParseExact(str, "G", CultureInfo.InvariantCulture);
+            var seconds = ReadInt32(true);
+            return seconds == null ? (isNullable) ? null : (DateTime?) DateTime.MinValue : DateHelper.FromUnixTime(seconds.Value);
         }
         public virtual char ReadChar()
         {
-            string str = ReadString();            
+            var str = ReadString();            
             if (str == null)
             {
                 return (char) 0;
@@ -85,24 +92,66 @@
             }                        
             return str[0];
         }
-        public virtual int ReadEnum()
+        public virtual object ReadEnum(Type type)
         {
-            return ReadInt32();            
+            return Enum.Parse(type, ReadInt64(false).ToString(), false);
         }
-        public virtual long ReadInt64()
+        public virtual long? ReadInt64(bool isNullable)
         {
-            string value = ReadNumericValue();
-            return value == null ? 0 : Convert.ToInt64(value);
+            var value = ReadNumericValue();
+            return value == null ? (isNullable ? null : (long?)0) : Convert.ToInt64(value);
         }
-        public virtual float ReadFloat()
+        public virtual bool? ReadBool(bool isNullable)
         {
-            string value = ReadNumericValue();
-            return value == null ? 0 : Convert.ToSingle(value);
+            var str = ReadNonStringValue('0');
+            if (str == null) return isNullable ? null : (bool?) false;
+            if (str.Equals("true")) return true;
+            if (str.Equals("false")) return false;
+            throw new JsonException("Expecting true or false, but got " + str);
         }
-        public virtual short ReadInt16()
+        public virtual object ReadObject()
         {
-            string value = ReadNumericValue();
-            return value == null ? (short)0 : Convert.ToInt16(value);
+            if (Peek() == JsonTokens.StringDelimiter)
+            {
+                return ReadString();                
+            }
+            var value = ReadNumericValue();
+            if (value == null) return null;            
+            if (value.Equals("true")) return true;
+            if (value.Equals("false")) return false;
+            try
+            {
+                return int.Parse(value);
+            }
+            catch (Exception ex)
+            {
+                if (!(ex is FormatException) && !(ex is OverflowException)) { throw; }
+            }
+            try
+            {
+                return decimal.Parse(value);
+            }
+            catch (Exception ex)
+            {
+                if (!(ex is FormatException) && !(ex is OverflowException)) { throw; }
+            }
+            return value;
+        }
+
+        public virtual float? ReadFloat(bool isNullable)
+        {
+            var value = ReadNumericValue();
+            return value == null ? (isNullable ? null : (float?)0) : Convert.ToSingle(value);
+        }
+        public virtual decimal? ReadDecimal(bool isNullable)
+        {
+            var value = ReadNumericValue();
+            return value == null ? (isNullable ? null : (decimal?)0) : Convert.ToDecimal(value);
+        }
+        public virtual short? ReadInt16(bool isNullable)
+        {
+            var value = ReadNumericValue();
+            return value == null ? (isNullable ? null : (short?)0) : Convert.ToInt16(value);
         }
         public virtual string ReadNumericValue()
         {
@@ -110,15 +159,15 @@
         }
         public virtual string ReadNonStringValue(char offset)
         {
-            StringBuilder sb = new StringBuilder(10);
+            var sb = new StringBuilder(10);
             while (true)
             {
-                char c = Peek();
+                var c = Peek();
                 if (IsDelimiter(c))
                 {
                     break;
                 }
-                int read = _reader.Read();
+                var read = _reader.Read();
                 if (read >= '0' && read <= '9')
                 {
                     sb.Append(read - offset);
@@ -128,7 +177,7 @@
                     sb.Append((char) read);
                 }                
             }
-            string str = sb.ToString();
+            var str = sb.ToString();
             return str == "null" ? null : str;
         }
         public virtual bool IsDelimiter(char c)
@@ -139,18 +188,18 @@
         {
             return char.IsWhiteSpace(c);
         }
-
+        
         public virtual char Peek()
         {
-            int c = _reader.Peek();
+            var c = _reader.Peek();
             return ValidateChar(c);
         }
         public virtual char Read()
         {
-            int c = _reader.Read();
+            var c = _reader.Read();
             return ValidateChar(c);
         }
-        private char ValidateChar(int c)
+        private static char ValidateChar(int c)
         {
             if (c == -1)
             {
@@ -158,7 +207,7 @@
             }
             return (char)c;
         }
-        
+
         public virtual string FromEscaped(char c)
         {
             switch (c)
@@ -167,6 +216,8 @@
                     return "\"";
                 case '\\':
                     return "\\";
+                case '/':
+                    return "/";
                 case 'b':
                     return "\b";
                 case 'f':
@@ -181,18 +232,24 @@
                     throw new ArgumentException("Unrecognized escape character: " + c);
             }
         }
-
         protected internal virtual void AssertAndConsume(char character)
         {
-            char c = Read();
+            var c = Read();
             if (c != character)
             {
                 throw new JsonException(string.Format("Expected character '{0}', but got: '{1}'", character, c));
             }
         }
+        protected internal virtual void AssertAndConsumeNull()
+        {
+            if (Read() != 'n' || Read() != 'u' || Read() != 'l' || Read() != 'l')
+            {
+                throw new JsonException("Expected null");
+            }            
+        }
         protected internal bool AssertNextIsDelimiterOrSeparator(char endDelimiter)
         {
-            char delimiter = Read();
+            var delimiter = Read();
             if (delimiter == endDelimiter)
             {
                 return true;
@@ -211,14 +268,31 @@
         }
         private void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (_disposed) return;
+            if (disposing)
             {
-                if (disposing)
-                {
-                    _reader.Close();
-                }
-                _disposed = true;
+                _reader.Close();
             }
+            _disposed = true;
+        }
+
+        private char HandleEscapedSequence()
+        {
+            var sb = new StringBuilder();
+            for (var i = 0; i < 4; i++)
+            {
+                var c = Read();
+                if (!IsHexDigit(c))
+                {
+                    throw new JsonException(string.Format("Expected hex digit but got: '{0}'", c));
+                }
+                sb.Append(c);
+            }
+            return (char)int.Parse(sb.ToString(), NumberStyles.HexNumber);             
+        }
+        private static bool IsHexDigit(char x)
+        {
+            return (x >= '0' && x <= '9') || (x >= 'a' && x <= 'f') || (x >= 'A' && x <= 'F');
         }
     }
 }
