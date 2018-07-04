@@ -14,12 +14,72 @@
         {
             _reader = input;
         }
-        public JsonReader(Stream input) : this(new StreamReader(input, Encoding.UTF8)) { }        
+        public JsonReader(Stream input) : this(new StreamReader(input, Encoding.UTF8)) { }
         public JsonReader(string input) : this(new StringReader(input)) { }
 
+        public virtual void ReadSkip()
+        {
+            SkipWhiteSpaces();
+            var c = Peek();
+            if (c == JsonTokens.StartArrayCharacter)
+            {
+                AssertAndConsume(JsonTokens.StartArrayCharacter);
+                SkipWhiteSpaces();
+                if (Peek() == JsonTokens.EndArrayCharacter)
+                {
+                    Read();
+                }
+                else
+                {
+                    while (true)
+                    {
+                        ReadSkip();
+                        SkipWhiteSpaces();
+                        if (AssertNextIsDelimiterOrSeparator(JsonTokens.EndArrayCharacter))
+                        {
+                            break;
+                        }
+                    }
+                }
+                return;
+            }
+            if (c == JsonTokens.StartObjectLiteralCharacter)
+            {
+                AssertAndConsume(JsonTokens.StartObjectLiteralCharacter);
+                SkipWhiteSpaces();
+                if (Peek() == JsonTokens.EndObjectLiteralCharacter)
+                {
+                    Read();
+                }
+                else
+                {
+                    while (true)
+                    {
+                        var name = ReadString();
+                        SkipWhiteSpaces();
+                        AssertAndConsume(JsonTokens.PairSeparator);
+                        SkipWhiteSpaces();
+                        ReadSkip();
+                        SkipWhiteSpaces();
+                        if (AssertNextIsDelimiterOrSeparator(JsonTokens.EndObjectLiteralCharacter))
+                        {
+                            break;
+                        }
+                    }
+                }
+                return;
+            }
+            if (c == JsonTokens.StringDelimiter)
+            {
+                ReadString();
+                return;
+            }
+            ReadObject();
+        }
+
         public virtual void SkipWhiteSpaces()
-        {            
-            while(true)
+        {
+            while (true)
             {
                 var c = Peek();
                 if (!char.IsWhiteSpace(c))
@@ -39,13 +99,13 @@
             if (Peek() != JsonTokens.StringDelimiter)
             {
                 AssertAndConsumeNull();
-                return null;   
+                return null;
             }
             Read(); //we know this is a StringDelimiter      
             var sb = new StringBuilder(25);
             var isEscaped = false;
 
-            while(true)
+            while (true)
             {
                 var c = Read();
                 if (c == '\\' && !isEscaped)
@@ -54,18 +114,18 @@
                     continue;
                 }
                 if (isEscaped)
-                {                    
+                {
                     if (c == 'u') { sb.Append(HandleEscapedSequence()); }
-                    else { sb.Append(FromEscaped(c)); }                    
+                    else { sb.Append(FromEscaped(c)); }
                     isEscaped = false;
                     continue;
                 }
                 if (c == '"')
-                {                 
+                {
                     break;
                 }
                 sb.Append(c);
-            }            
+            }
             var str = sb.ToString();
             return str == "null" ? null : str;
         }
@@ -77,19 +137,19 @@
         public virtual DateTime? ReadDateTime(bool isNullable)
         {
             var seconds = ReadInt32(true);
-            return seconds == null ? (isNullable) ? null : (DateTime?) DateTime.MinValue : DateHelper.FromUnixTime(seconds.Value);
+            return seconds == null ? (isNullable) ? null : (DateTime?)DateTime.MinValue : DateHelper.FromUnixTime(seconds.Value);
         }
         public virtual char ReadChar()
         {
-            var str = ReadString();            
+            var str = ReadString();
             if (str == null)
             {
-                return (char) 0;
+                return (char)0;
             }
             if (str.Length > 1)
             {
                 throw new JsonException("Expecting a character, but got a string");
-            }                        
+            }
             return str[0];
         }
         public virtual object ReadEnum(Type type)
@@ -104,7 +164,7 @@
         public virtual bool? ReadBool(bool isNullable)
         {
             var str = ReadNonStringValue('0');
-            if (str == null) return isNullable ? null : (bool?) false;
+            if (str == null) return isNullable ? null : (bool?)false;
             if (str.Equals("true")) return true;
             if (str.Equals("false")) return false;
             throw new JsonException("Expecting true or false, but got " + str);
@@ -113,10 +173,10 @@
         {
             if (Peek() == JsonTokens.StringDelimiter)
             {
-                return ReadString();                
+                return ReadString();
             }
             var value = ReadNumericValue();
-            if (value == null) return null;            
+            if (value == null) return null;
             if (value.Equals("true")) return true;
             if (value.Equals("false")) return false;
             try
@@ -174,8 +234,8 @@
                 }
                 else
                 {
-                    sb.Append((char) read);
-                }                
+                    sb.Append((char)read);
+                }
             }
             var str = sb.ToString();
             return str == "null" ? null : str;
@@ -188,7 +248,7 @@
         {
             return char.IsWhiteSpace(c);
         }
-        
+
         public virtual char Peek()
         {
             var c = _reader.Peek();
@@ -245,7 +305,7 @@
             if (Read() != 'n' || Read() != 'u' || Read() != 'l' || Read() != 'l')
             {
                 throw new JsonException("Expected null");
-            }            
+            }
         }
         protected internal bool AssertNextIsDelimiterOrSeparator(char endDelimiter)
         {
@@ -256,9 +316,9 @@
             }
             if (delimiter == ',')
             {
-                return false;                
+                return false;
             }
-            throw new JsonException("Expected array separator or end of array, got: " + delimiter);            
+            throw new JsonException("Expected array separator or end of array, got: " + delimiter);
         }
 
         public void Dispose()
@@ -288,7 +348,7 @@
                 }
                 sb.Append(c);
             }
-            return (char)int.Parse(sb.ToString(), NumberStyles.HexNumber);             
+            return (char)int.Parse(sb.ToString(), NumberStyles.HexNumber);
         }
         private static bool IsHexDigit(char x)
         {

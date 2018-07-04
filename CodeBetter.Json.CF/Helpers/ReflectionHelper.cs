@@ -52,10 +52,10 @@ namespace CodeBetter.Json.Helpers
         public static FieldInfo FindField(Type type, string name)
         {
             var field = FindFieldThroughoutHierarchy(type, name);
-            if (field == null)
-            {
-                throw new ArgumentException(type.FullName + " doesn't have a field named: " + name);
-            }
+            //if (field == null)
+            //{
+            //    throw new ArgumentException(type.FullName + " doesn't have a field named: " + name);
+            //}
             return field;
         }
         public static FieldInfo FindFieldThroughoutHierarchy(Type type, string name)

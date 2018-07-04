@@ -20,6 +20,10 @@ namespace CodeBetter.Json.Test.Console
 
             var x = Converter.Serialize(data);
             var y = Converter.Deserialize<CategoryData>(x);
+
+            var z = "{\"code\": 12, \"arr\": [\"1 2\",\"23\",22,{}],\"test\":\"test dc\", \"items\":[[\"str1\",1,2.2,true,null],[\"str2\",8,0,false]],\"process\":\"process\"}";
+            var zz = Converter.Deserialize<CategoryData>(z);
+
             var json = Converter.Serialize(new User("name", "password", AccountStatus.Disabled), "_", ProcessValue);
             Converter.Serialize("out.txt", new[] { 1, 2, 3, -4 }, "_");
             Console.WriteLine(json);
@@ -28,11 +32,11 @@ namespace CodeBetter.Json.Test.Console
             var user = Converter.Deserialize<User>(json, "_");
             var values = Converter.DeserializeFromFile<int[]>("out.txt", "_");
             Console.WriteLine(user.UserName);
-            
+
             Console.WriteLine("Done. Press enter to exit");
             Console.ReadLine();
         }
-        
+
         private static bool ProcessValue(string name, ref object value)
         {
             if (string.Compare(name, "password") == 0)
@@ -55,7 +59,7 @@ namespace CodeBetter.Json.Test.Console
         private string _password;
         [NonSerialized]
         private readonly Role _role;
-        private AccountStatus _status;    
+        private AccountStatus _status;
         private Thing _think = new Thing();
         private bool _enabled = true;
 

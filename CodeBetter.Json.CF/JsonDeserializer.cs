@@ -154,7 +154,14 @@
                 _reader.SkipWhiteSpaces();
                 _reader.AssertAndConsume(JsonTokens.PairSeparator);
                 _reader.SkipWhiteSpaces();
-                field.SetValue(instance, DeserializeValue(field.FieldType));
+                if (field == null)
+                {
+                    _reader.ReadSkip();
+                }
+                else
+                {
+                    field.SetValue(instance, DeserializeValue(field.FieldType));
+                }
                 _reader.SkipWhiteSpaces();
                 if (_reader.AssertNextIsDelimiterOrSeparator(JsonTokens.EndObjectLiteralCharacter))
                 {
