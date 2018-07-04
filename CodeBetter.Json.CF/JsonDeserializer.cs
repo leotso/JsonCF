@@ -2,9 +2,9 @@
 {
     using System;
     using System.Collections;
-    using System.Collections.Generic;    
-    
-    using System.Reflection;    
+    using System.Collections.Generic;
+
+    using System.Reflection;
     using Helpers;
 
     public class JsonDeserializer
@@ -13,7 +13,7 @@
         private readonly JsonReader _reader;
         private readonly string _fieldPrefix;
 
-        public JsonDeserializer(JsonReader reader) : this(reader, string.Empty){}
+        public JsonDeserializer(JsonReader reader) : this(reader, string.Empty) { }
         public JsonDeserializer(JsonReader reader, string fieldPrefix)
         {
             _reader = reader;
@@ -26,9 +26,9 @@
         }
         public static T Deserialize<T>(JsonReader reader, string fieldPrefix)
         {
-            return (T) new JsonDeserializer(reader, fieldPrefix).DeserializeValue(typeof(T));
+            return (T)new JsonDeserializer(reader, fieldPrefix).DeserializeValue(typeof(T));
         }
-       
+
         private object DeserializeValue(Type type)
         {
             _reader.SkipWhiteSpaces();
@@ -37,14 +37,14 @@
             {
                 isNullable = true;
                 type = Nullable.GetUnderlyingType(type);
-            }       
+            }
             if (type == typeof(int))
             {
-                return _reader.ReadInt32(isNullable);                
+                return _reader.ReadInt32(isNullable);
             }
             if (type == typeof(string))
             {
-                return _reader.ReadString();                
+                return _reader.ReadString();
             }
             if (type == typeof(double))
             {
@@ -57,7 +57,7 @@
             if (_IEnumerableType.IsAssignableFrom(type))
             {
                 return DeserializeList(type);
-            }            
+            }
             if (type == typeof(char))
             {
                 return _reader.ReadChar();
@@ -73,7 +73,7 @@
             if (type == typeof(long))
             {
                 return _reader.ReadInt64(isNullable);
-            }        
+            }
             if (type == typeof(float))
             {
                 return _reader.ReadFloat(isNullable);
@@ -85,12 +85,12 @@
             if (type == typeof(short))
             {
                 return _reader.ReadInt16(isNullable);
-            }     
+            }
             if (type == typeof(object))
             {
                 return _reader.ReadObject();
             }
-            return ParseObject(type);            
+            return ParseObject(type);
         }
         private object DeserializeList(Type listType)
         {
@@ -100,27 +100,27 @@
                 _reader.AssertAndConsumeNull();
                 return null;
             }
-            _reader.AssertAndConsume(JsonTokens.StartArrayCharacter);            
+            _reader.AssertAndConsume(JsonTokens.StartArrayCharacter);
             var itemType = ListHelper.GetListItemType(listType);
             bool isReadonly;
             var container = ListHelper.CreateContainer(listType, itemType, out isReadonly);
-            
-            _reader.SkipWhiteSpaces();            
+
+            _reader.SkipWhiteSpaces();
             if (_reader.Peek() == JsonTokens.EndArrayCharacter)
             {
                 _reader.Read();
-                return container;
             }
-            
-            while(true)
+            else
             {
-                
-                container.Add(DeserializeValue(itemType));
-                _reader.SkipWhiteSpaces();
-                if (_reader.AssertNextIsDelimiterOrSeparator(JsonTokens.EndArrayCharacter))
+                while (true)
                 {
-                    break;
-                }                           
+                    container.Add(DeserializeValue(itemType));
+                    _reader.SkipWhiteSpaces();
+                    if (_reader.AssertNextIsDelimiterOrSeparator(JsonTokens.EndArrayCharacter))
+                    {
+                        break;
+                    }
+                }
             }
             if (listType.IsArray)
             {
@@ -133,7 +133,7 @@
             return container;
         }
         private object ParseObject(Type type)
-        {           
+        {
             if (_reader.Peek() != JsonTokens.StartObjectLiteralCharacter)
             {
                 _reader.AssertAndConsumeNull();
@@ -152,14 +152,14 @@
                 }
                 var field = ReflectionHelper.FindField(type, name);
                 _reader.SkipWhiteSpaces();
-                _reader.AssertAndConsume(JsonTokens.PairSeparator);                
+                _reader.AssertAndConsume(JsonTokens.PairSeparator);
                 _reader.SkipWhiteSpaces();
                 field.SetValue(instance, DeserializeValue(field.FieldType));
                 _reader.SkipWhiteSpaces();
                 if (_reader.AssertNextIsDelimiterOrSeparator(JsonTokens.EndObjectLiteralCharacter))
                 {
                     break;
-                } 
+                }
             }
             return instance;
         }
